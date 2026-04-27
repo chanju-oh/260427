@@ -4,8 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>미술사 탐정단: 조형사 방탈출</title>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
     <style>
         body { font-family: 'Malgun Gothic', sans-serif; background-color: #1a1a2e; color: #fff; text-align: center; margin: 0; padding: 20px; touch-action: manipulation; }
         h1 { color: #f0c987; font-size: 2em; margin-bottom: 5px; }
@@ -15,7 +13,9 @@
         #startScreen p { font-size: 1.2em; color: #aaa; margin-bottom: 30px; line-height: 1.5; }
         input[type="text"] { padding: 15px; font-size: 1.2em; border-radius: 8px; border: 2px solid #e94560; background: #16213e; color: #fff; text-align: center; margin-bottom: 20px; width: 80%; max-width: 300px; }
         
-        #stageTitle { font-size: 1.6em; color: #4ade80; margin-bottom: 20px; font-weight: bold; }
+        #stageTitle { font-size: 1.6em; color: #4ade80; margin-bottom: 5px; font-weight: bold; }
+        .notice-text { color: #ffb74d; font-size: 1.1em; font-weight: bold; margin-bottom: 20px; }
+        
         #pool { background: #16213e; border: 3px dashed #533483; border-radius: 10px; padding: 20px; min-height: 80px; margin-bottom: 20px; display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; align-items: center; }
         
         /* 활동지 표(Table) 스타일 */
@@ -26,7 +26,9 @@
         th:first-child { width: 12%; }
         td.row-label { background: #e0e0e0; font-weight: bold; font-size: 1.1em; }
         
-        .table-img { height: 100px; object-fit: contain; display: block; margin: 0 auto 10px auto; border-radius: 8px; }
+        /* 유물 사진 스타일 */
+        .table-img { height: 100px; object-fit: contain; display: block; margin: 0 auto 10px auto; border-radius: 8px; cursor: pointer; transition: transform 0.2s; }
+        .table-img:hover { transform: scale(1.05); }
         
         .drop-zone { min-height: 60px; height: 100%; width: 100%; display: flex; flex-direction: column; gap: 8px; align-items: center; justify-content: center; cursor: pointer; border-radius: 5px; transition: 0.2s; }
         .drop-zone.dragover { background-color: #e0f7fa; border: 2px dashed #00bcd4; }
@@ -43,26 +45,57 @@
         .start-btn { background-color: #e94560; color: white; box-shadow: 0 5px 0 #b02a42; font-size: 1.5em; }
         .start-btn:active { transform: translateY(5px); box-shadow: 0 0 0 #b02a42; }
         
-        /* 버튼 디자인 상태별 변경을 위한 기본 클래스 설정 제거 (JS에서 직접 조작) */
         #checkBtn { background-color: #4caf50; color: white; box-shadow: 0 4px 0 #388e3c; }
         #checkBtn:active { transform: translateY(4px); box-shadow: 0 0 0 #388e3c; }
         
         .correct { background-color: #c8e6c9 !important; border-color: #4caf50 !important; color: #2e7d32 !important; }
         .wrong { animation: shake 0.4s; border-color: #f44336 !important; opacity: 0.8; }
         @keyframes shake { 0% { transform: translateX(0); } 25% { transform: translateX(-5px); } 50% { transform: translateX(5px); } 75% { transform: translateX(-5px); } 100% { transform: translateX(0); } }
+
+        /* 이미지 확대 팝업(모달) 스타일 */
+        #imageModal {
+            display: none; 
+            position: fixed; 
+            z-index: 9999; 
+            left: 0; 
+            top: 0; 
+            width: 100%; 
+            height: 100%; 
+            background-color: rgba(0,0,0,0.85); 
+            justify-content: center; 
+            align-items: center; 
+            flex-direction: column;
+            cursor: pointer;
+        }
+        #modalImg {
+            max-width: 90%; 
+            max-height: 80%; 
+            border-radius: 10px; 
+            box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+            cursor: default;
+        }
+        #closeModalText {
+            color: #fff;
+            margin-top: 20px;
+            font-size: 1.2em;
+            font-weight: bold;
+            background: #e94560;
+            padding: 10px 20px;
+            border-radius: 20px;
+        }
     </style>
 </head>
 <body>
 
     <div id="startScreen">
         <h1>🕵️‍♂️ 조형사 방탈출 퍼즐</h1>
-        <p>조원들과 힘을 합쳐 표의 빈칸을 정확히 채워보세요!<br>PC는 드래그, 태블릿은 <b>[단어 터치] 👉 [빈칸 터치]</b></p>
-        <input type="text" id="groupName" placeholder="조 이름을 입력하세요 (예: 1조)" autocomplete="off"><br>
+        <p>조원들과 힘을 합쳐 표의 빈칸을 정확히 채워보세요!<br>PC는 드래그, 태블릿은 <b>[단어 터치] 👉 [빈칸 터치]</b><br><br><span style="color:#ffb74d; font-weight:bold;">🔍 표 안의 사진을 누르면 원본 크기로 크게 볼 수 있습니다!</span></p>
         <button class="start-btn" onclick="startGame()">🔥 탈출 시작!</button>
     </div>
 
     <div class="container" id="gameArea">
         <div id="stageTitle"></div>
+        <div class="notice-text">🔍 헷갈릴 때는 표 안의 사진을 터치해서 크게 관찰하세요!</div>
         <div id="pool"></div>
         <div class="table-wrapper" id="tableContainer"></div>
         <div class="btn-wrap">
@@ -70,24 +103,15 @@
         </div>
     </div>
 
-    <script>
-        // ★ 선생님의 파이어베이스 설정값으로 변경하세요 ★
-        const firebaseConfig = {
-            apiKey: "AIzaSyALlQNFjwj6YFOHbdSfsNdnAoYje3HpHL4",
-            authDomain: "art-funding.firebaseapp.com",
-            databaseURL: "https://art-funding-default-rtdb.firebaseio.com",
-            projectId: "art-funding",
-            storageBucket: "art-funding.firebasestorage.app",
-            messagingSenderId: "976837369403",
-            appId: "1:976837369403:web:8c71defb3a8919cc82c61e"
-        };
-        firebase.initializeApp(firebaseConfig);
-        const db = firebase.database();
+    <div id="imageModal" onclick="closeModal()">
+        <img id="modalImg" src="" onclick="event.stopPropagation()">
+        <div id="closeModalText">화면을 터치하면 닫힙니다</div>
+    </div>
 
+    <script>
         let currentStage = 0;
         let selectedItem = null;
-        let groupName = "";
-        let isStageCleared = false; // 🔥 정답 확인 모드를 위한 상태 변수 추가
+        let isStageCleared = false; 
 
         const stages = [
             {
@@ -129,7 +153,7 @@
             {
                 title: "🔒 3단계: 흙과 불의 예술, 도자기",
                 headers: ["구분", "고려 청자", "조선 분청사기", "조선 백자"],
-                images: ["", "청자상감운학문매벙.png", "분청박지모란문편병.png", "백자병.png"],
+                images: ["", "청자상감운학문매병.png", "분청박지모란문편병.png", "백자병.png"],
                 rows: [
                     { label: "시대", cells: [ ["고려시대"], ["조선시대 (초)"], ["조선시대"] ] },
                     { label: "흙", cells: [ ["청자토"], ["분청토"], ["백자토"] ] },
@@ -169,23 +193,12 @@
         ];
 
         function startGame() {
-            groupName = document.getElementById('groupName').value.trim();
-            if(!groupName) { alert("조 이름을 입력해주세요!"); return; }
             document.getElementById('startScreen').style.display = 'none';
             document.getElementById('gameArea').style.display = 'block';
-            updateStatusToFirebase();
             renderStage();
         }
 
-        function updateStatusToFirebase(isClear = false) {
-            db.ref('escapeStatus/' + groupName).set({
-                stage: isClear ? "🎉 탈출 성공!" : (currentStage + 1) + "단계 진행 중",
-                lastUpdate: firebase.database.ServerValue.TIMESTAMP
-            });
-        }
-
         function renderStage() {
-            // 🔥 스테이지 렌더링 시 상태 초기화 및 버튼 디자인 복구
             isStageCleared = false;
             const btn = document.getElementById('checkBtn');
             btn.innerText = "✅ 정답 확인";
@@ -198,7 +211,7 @@
             let tableHTML = '<table><thead><tr>';
             tableHTML += `<th>${data.headers[0]}</th>`;
             for(let i=1; i<data.headers.length; i++) {
-                tableHTML += `<th><img src="${data.images[i]}" class="table-img"><br>${data.headers[i]}</th>`;
+                tableHTML += `<th><img src="${data.images[i]}" class="table-img" title="터치하면 커집니다!"><br>${data.headers[i]}</th>`;
             }
             tableHTML += '</tr></thead><tbody>';
             
@@ -212,6 +225,15 @@
             tableHTML += '</tbody></table>';
             
             document.getElementById('tableContainer').innerHTML = tableHTML;
+
+            // 이미지 클릭 시 팝업 띄우는 이벤트 연결
+            document.querySelectorAll('.table-img').forEach(img => {
+                img.onclick = (e) => {
+                    e.stopPropagation(); 
+                    document.getElementById('modalImg').src = img.src;
+                    document.getElementById('imageModal').style.display = 'flex';
+                };
+            });
 
             const pool = document.getElementById('pool');
             pool.innerHTML = '';
@@ -234,6 +256,11 @@
             });
 
             setupDropZones();
+        }
+
+        // 모달창 닫기 함수
+        function closeModal() {
+            document.getElementById('imageModal').style.display = 'none';
         }
 
         function setupDropZones() {
@@ -270,21 +297,17 @@
         }
 
         document.getElementById('checkBtn').onclick = () => {
-            // 🔥 이미 클리어한 상태(완성본 모드)에서 버튼을 누르면 다음 단계로 진행
             if (isStageCleared) {
                 if (currentStage < stages.length - 1) {
                     currentStage++;
-                    updateStatusToFirebase();
                     renderStage();
                 } else {
-                    updateStatusToFirebase(true);
                     document.getElementById('checkBtn').style.display = 'none';
                     document.getElementById('pool').innerHTML = '<h2 style="color:#4ade80; text-align:center; width:100%; margin:0;">🎉 방탈출 성공! 조형사 탐정단 미션을 완벽히 마스터했습니다! 🎉</h2>';
                 }
                 return;
             }
 
-            // 채점 로직
             let allCorrect = true;
             document.querySelectorAll('.drop-zone').forEach(zone => {
                 const correctAnswers = JSON.parse(zone.getAttribute('data-answers'));
@@ -305,23 +328,20 @@
                 });
             });
 
-            // 모두 맞았을 때 (완성본 모드로 전환)
             if (allCorrect && document.getElementById('pool').querySelectorAll('.item').length === 0) {
-                isStageCleared = true; // 상태 변경
+                isStageCleared = true; 
                 
-                // 단어들 드래그 비활성화
                 document.querySelectorAll('.item').forEach(item => {
                     item.draggable = false;
                     item.style.cursor = 'default';
                 });
 
-                // 안내 메시지 및 버튼 변경
                 const pool = document.getElementById('pool');
                 pool.innerHTML = '<h2 style="color:#4ade80; margin:0; width:100%;">🎉 정답입니다! 완성된 표를 학습지에 모두 적은 후 아래 버튼을 누르세요. 🎉</h2>';
                 
                 const btn = document.getElementById('checkBtn');
                 btn.innerText = "➡️ 다 적었어요! 다음 단계로";
-                btn.style.backgroundColor = "#2196f3"; // 파란색으로 변경
+                btn.style.backgroundColor = "#2196f3"; 
                 btn.style.boxShadow = "0 4px 0 #1565c0";
                 
             } else if (allCorrect && document.getElementById('pool').querySelectorAll('.item').length > 0) {
